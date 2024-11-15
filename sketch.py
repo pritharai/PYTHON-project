@@ -1,44 +1,88 @@
-import cv2  # OpenCV for image processing
-import streamlit as st  # Streamlit for creating the web app
-import numpy as np  # For handling image data
+import streamlit as st
+from PIL import Image, ImageEnhance, ImageFilter, ImageOps
+import io
 
-def create_sketch(image):
-    gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    inverted_image = cv2.bitwise_not(gray_image)
-    blurred = cv2.GaussianBlur(inverted_image, (15, 15), 0)
-    inverted_blur = cv2.bitwise_not(blurred)
-    sketch = cv2.divide(gray_image, inverted_blur, scale=256.0)
-    return sketch
+# Function to apply filters and transformations
+def apply_brightness(image, value):
+    enhancer = ImageEnhance.Brightness(image)
+    return enhancer.enhance(value)
+
+def apply_contrast(image, value):
+    enhancer = ImageEnhance.Contrast(image)
+    return enhancer.enhance(value)
+
+def apply_sharpness(image, value):
+    enhancer = ImageEnhance.Sharpness(image)
+    return enhancer.enhance(value)
+
+def apply_blur(image, value):
+    return image.filter(ImageFilter.GaussianBlur(value))
+
+def apply_edges(image):
+    return image.filter(ImageFilter.FIND_EDGES)
+
+def apply_invert(image):
+    return ImageOps.invert(image.convert("RGB"))
+
+def toggle_grayscale(image, is_grayscale):
+    if is_grayscale:
+        return ImageOps.grayscale(image)
+    else:
+        return image
 
 def main():
-    st.title("Pencil Sketch Generator")
-    st.write("Upload an image to convert it into a pencil sketch.")
+    # Streamlit UI components
+    st.title("Image Editor")
+    
+    # Upload image
+    uploaded_file = st.file_uploader("Choose an image", type=["jpg", "png", "jpeg", "bmp", "gif"])
+    
+    if uploaded_file is not None:
+        # Load image
+        image = Image.open(uploaded_file)
+        st.image(image, caption="Original Image", use_column_width=True)
+        
+        # Convert to editable image (a copy)
+        processed_image = image.copy()
 
-    uploaded_file = st.file_uploader("Upload an Image", type=["jpg", "jpeg", "png"])
+        # Sliders and buttons
+        brightness = st.slider("Brightness", 0.0, 2.0, 1.0)
+        contrast = st.slider("Contrast", 0.0, 2.0, 1.0)
+        sharpness = st.slider("Sharpness", 0.0, 2.0, 1.0)
+        blur = st.slider("Blur", 0.0, 10.0, 0.0)
+        edge_detection = st.checkbox("Edge Detection")
+        invert_colors = st.checkbox("Invert Colors")
+        grayscale = st.checkbox("Grayscale")
 
-    if uploaded_file:
-        file_bytes = np.asarray(bytearray(uploaded_file.read()), dtype=np.uint8)
-        image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
+        # Apply Filters
+        if brightness != 1.0:
+            processed_image = apply_brightness(processed_image, brightness)
+        if contrast != 1.0:
+            processed_image = apply_contrast(processed_image, contrast)
+        if sharpness != 1.0:
+            processed_image = apply_sharpness(processed_image, sharpness)
+        if blur != 0.0:
+            processed_image = apply_blur(processed_image, blur)
+        if edge_detection:
+            processed_image = apply_edges(processed_image)
+        if invert_colors:
+            processed_image = apply_invert(processed_image)
+        processed_image = toggle_grayscale(processed_image, grayscale)
+        
+        # Display processed image
+        st.image(processed_image, caption="Processed Image", use_column_width=True)
+        
+        # Save button
+        buf = io.BytesIO()
+        processed_image.save(buf, format="PNG")
+        byte_data = buf.getvalue()
 
-        st.image(cv2.cvtColor(image, cv2.COLOR_BGR2RGB), caption="Original Image", use_column_width=True)
-
-        sketch = create_sketch(image)
-
-        zoom_factor = st.slider("Zoom Level", 0.5, 3.0, 1.0, step=0.1)
-
-        height, width = sketch.shape[:2]
-        zoomed_sketch = cv2.resize(sketch, (int(width * zoom_factor), int(height * zoom_factor)), interpolation=cv2.INTER_LINEAR)
-
-        st.image(zoomed_sketch, caption="Pencil Sketch", use_column_width=True, clamp=True, channels="GRAY")
-
-        if st.button("Download Sketch"):
-            _, buffer = cv2.imencode(".png", sketch)
-            st.download_button(
-                label="Click to Download",
-                data=buffer.tobytes(),
-                file_name="pencil_sketch.png",
-                mime="image/png"
-            )
+        st.download_button(
+            label="Download Image",
+            data=byte_data,
+            file_name="processed_image.png",
+            mime="image/png"
+        )
 
 if __name__ == "__main__":
     main()
